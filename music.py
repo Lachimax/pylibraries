@@ -131,6 +131,7 @@ class SongDictTree:
         if path[-4:] != '.csv':
             path += '.csv'
         rows = self.csv()
+        rows.sort(key=lambda r: (r[0], r[1]))
         header = ['Artist', 'Album', 'Title']
         # writing to csv file
         with open(path, 'w', newline='', encoding="utf-8") as csv_file:
