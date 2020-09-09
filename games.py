@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 # TODO: Average rating by series
 
 class GameLibrary:
@@ -246,11 +247,10 @@ class GameLibrary:
         completion_levels.sort(key=lambda lib: lib.num, reverse=True)
 
         for i, c in enumerate(completion_levels):
-            percent = 100*(c.num/self.unique_game_count)
+            percent = 100 * (c.num / self.unique_game_count)
             print(str(i) + ". " + str(c.title) + " (" + str(c.num) + ")" + "[" + str(percent) + "%]")
 
         print()
-
 
     def import_from_xl(self, path="C:\\Users\\Lachlan\\Google Drive\\Projects\\Python\\libraries\\Games Library.xlsx"):
         lib = pd.read_excel(path)
