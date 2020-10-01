@@ -1,13 +1,19 @@
 import os
 import taglib as tl
 import csv
+from sys import platform
 
 
 def check_trailing_slash(path):
+
     path = str(path)
+    if platform == 'linux':
+        char = '/'
+    else:
+        char = '\\'
     if path != "":
-        if path[-1] != '\\':
-            path += '\\'
+        if path[-1] != char:
+            path += char
     return path
 
 
