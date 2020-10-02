@@ -5,7 +5,6 @@ from sys import platform
 
 
 def check_trailing_slash(path):
-
     path = str(path)
     if platform == 'linux':
         char = '/'
@@ -30,13 +29,16 @@ song_filetypes = ['mp3', 'm4a', 'm4p', 'MP3', 'aif', 'm4v', 'Mp3', 'wav', 'mpg']
 library_types = ['itunes', 'google play music', 'takeout', 'comparison']
 
 
+# def playlist_takeout_to_itunes(path):
+
+
 class SongDictTree:
     def __init__(self, path: str = None, library_type: str = 'Google Play Music', delete_duplicate: bool = False):
         """
 
         :param path: This should be the high-level directory in which the folders named after artists are contained.
         """
-
+        self.num_tracks = 0
         self.artists = {}
         if library_type.lower() in library_types:
             self.type = library_type.lower()
@@ -60,12 +62,16 @@ class SongDictTree:
 
     def populate(self, delete_duplicate: bool = False):
         print('Building tree...')
-        self.add_directory(path=self.path, recurse=True, delete_duplicate=delete_duplicate)
+        if self.type == 'takeout':
+            recurse = True
+        else:
+            recurse = True
+        self.add_directory(path=self.path, recurse=recurse, delete_duplicate=delete_duplicate)
         print('Done.')
 
     def add_directory(self, path, recurse: bool = False, delete_duplicate: bool = False):
         path = check_trailing_slash(path)
-        print(path)
+        print('Adding directory:', path)
         for song in filter(lambda f: get_filetype(f) in song_filetypes, os.listdir(path)):
             self.add_song(path=path, filename=song, delete_duplicate=delete_duplicate)
         if recurse:
@@ -73,7 +79,7 @@ class SongDictTree:
                 self.add_directory(path=path + directory, recurse=True, delete_duplicate=delete_duplicate)
 
     def add_song(self, path: str, filename: str, delete_duplicate: bool = False):
-        print(path)
+        print('Adding song:', path + "\\" + filename)
         path = check_trailing_slash(path) + filename
         song = Song(path)
 
@@ -107,6 +113,7 @@ class SongDictTree:
         num = 0
         for artist in self.artists:
             num += self[artist].count_songs()
+        self.num_tracks = num
         return num
 
     def compare(self, other: 'SongDictTree'):
@@ -124,6 +131,7 @@ class SongDictTree:
                 missing_albums = artist.compare(other[artist.title])
                 if len(missing_albums) > 0:
                     missing_artists[artist.title] = missing_albums
+        missing_artists.count_songs()
         return missing_artists
 
     def csv(self):
@@ -134,11 +142,12 @@ class SongDictTree:
         return rows
 
     def write_csv(self, path):
+        path += '_' + str(self.num_tracks)
         if path[-4:] != '.csv':
             path += '.csv'
         rows = self.csv()
         rows.sort(key=lambda r: (r[0], r[1]))
-        header = ['Artist', 'Album', 'Title']
+        header = ['Artist', 'Album', 'Title', 'Path']
         # writing to csv file
         with open(path, 'w', newline='', encoding="utf-8") as csv_file:
             # creating a csv writer object
@@ -317,148 +326,4 @@ class Song:
         print(prefix + self.title)
 
     def csv(self):
-        return [self.artist, self.album, self.title]
-
-
-class SongTree:
-    def __init__(self, path: str, type: str = 'iTunes'):
-        """
-
-        :param path: This should be the high-level directory in which the folders named after artists are contained.
-        """
-        self.path = check_trailing_slash(path)
-        self.artists = self.get_artists()
-
-    def __getitem__(self, item):
-        return self.artists[item]
-
-    def get_artists(self):
-        print("Building tree...")
-        artist_list = filter(lambda n: os.path.isdir(self.path + n), os.listdir(self.path))
-        artists = []
-        for artist in artist_list:
-            artists.append(Artist(title=artist, path=self.path + artist + '\\'))
-        print("Done.")
-        return artists
-
-    def show_artists(self):
-        for artist in self.artists:
-            print(artist.title)
-
-    def show_albums(self):
-        for artist in self.artists:
-            print(artist.title)
-            artist.show_albums(pad=1)
-
-    def show_songs(self):
-        for artist in self.artists:
-            print(artist.title)
-            artist.show_songs(pad=1)
-
-    def count_songs(self):
-        num = 0
-        for artist in self.artists:
-            num += artist.count_songs()
-        return num
-
-    def all_filetypes(self):
-        filetypes = []
-        for artist in self.artists:
-            ft = artist.all_filetypes()
-            for filetype in ft:
-                if filetype not in filetypes:
-                    filetypes.append(filetype)
-
-        return filetypes
-
-
-class Artist:
-    def __init__(self, title: str, path: str):
-        """
-
-        :param title:
-        :param path: The directory containing the albums by a certain artist.
-        """
-        self.title = str(title)
-        self.path = check_trailing_slash(path)
-        self.albums = self.get_albums()
-
-    def __getitem__(self, item):
-        return self.albums[item]
-
-    def get_albums(self):
-        album_list = filter(lambda n: os.path.isdir(self.path + n), os.listdir(self.path))
-        albums = []
-        for album in album_list:
-            albums.append(Album(title=album, path=self.path + album + '\\'))
-        return albums
-
-    def show_albums(self, pad: int = 0):
-        padding = ""
-        for i in range(pad):
-            padding += "\t"
-        for album in self.albums:
-            print(padding + album.title)
-
-    def show_songs(self, pad: int = 0):
-        padding = ""
-        for i in range(pad):
-            padding += "\t"
-        for album in self.albums:
-            print(padding + album.title)
-            album.show_songs(pad=pad + 1)
-
-    def count_songs(self):
-        num = 0
-        for album in self.albums:
-            num += album.count_songs()
-        return num
-
-    def all_filetypes(self):
-        filetypes = []
-        for album in self.albums:
-            ft = album.all_filetypes()
-            for filetype in ft:
-                if filetype not in filetypes:
-                    filetypes.append(filetype)
-
-        return filetypes
-
-
-class Album:
-    def __init__(self, title: str, path: str):
-        """
-
-        :param title:
-        :param path: The directory containing the songs of an album.
-        """
-        self.title = str(title)
-        self.path = check_trailing_slash(path)
-        self.songs = self.get_songs()
-
-    def __getitem__(self, item):
-        return self.songs[item]
-
-    def get_songs(self):
-        song_list = filter(lambda f: get_filetype(f) in song_filetypes, os.listdir(self.path))
-        songs = []
-        for song in song_list:
-            songs.append(Song(title=song, path=self.path + song))
-        return songs
-
-    def show_songs(self, pad: int = 0):
-        padding = ""
-        for i in range(pad):
-            padding += "\t"
-        for song in self.songs:
-            song.show(prefix=padding)
-
-    def count_songs(self):
-        return len(self.songs)
-
-    def all_filetypes(self):
-        filetypes = []
-        for song in self.songs:
-            if song.filetype not in filetypes:
-                filetypes.append(song.filetype)
-        return filetypes
+        return [self.artist, self.album, self.title, self.path]
