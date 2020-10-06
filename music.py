@@ -2,6 +2,27 @@ import os
 import taglib as tl
 import csv
 from sys import platform
+import shutil
+
+
+def clear_empty_paths(path):
+    for next_path in filter(lambda d: os.path.isdir(path + "\\" + d), os.listdir(path)):
+        print(next_path)
+        next_path = path + "\\" + next_path
+        clear_empty_paths(next_path)
+
+    if os.path.isdir(path):
+        if len(os.listdir(path)) == 0:
+            print("Attempting removal of", path)
+            os.removedirs(path)
+
+def sanitise_path(path):
+    path = path.replace(";", "_").replace("|", "_").replace(",", "_").replace('"', "_").replace("'", "_")
+    path = path.replace(":", "_").replace("*", "_").replace(".", "_").replace("/", "_").replace("\\", "")
+    path = path.replace("^", "_").replace("<", "(").replace(">", ")").replace("?", "_")
+    while path[-1] == " ":
+        path = path[:-1]
+    return path
 
 
 def check_trailing_slash(path):
@@ -25,6 +46,15 @@ def get_filetype(path):
     return 'directory'
 
 
+def get_filename(path):
+    pos = -1
+    while abs(pos) <= len(path):
+        if path[pos] == '\\':
+            return path[pos + 1:]
+        pos = pos - 1
+    return path
+
+
 song_filetypes = ['mp3', 'm4a', 'm4p', 'MP3', 'aif', 'm4v', 'Mp3', 'wav', 'mpg']
 library_types = ['itunes', 'google play music', 'takeout', 'comparison']
 
@@ -33,7 +63,8 @@ library_types = ['itunes', 'google play music', 'takeout', 'comparison']
 
 
 class SongDictTree:
-    def __init__(self, path: str = None, library_type: str = 'Google Play Music', delete_duplicate: bool = False):
+    def __init__(self, path: str = None, library_type: str = 'Google Play Music', delete_duplicate: bool = False,
+                 sort_files: bool = False, recurse: bool = True, populate: bool = True):
         """
 
         :param path: This should be the high-level directory in which the folders named after artists are contained.
@@ -47,9 +78,12 @@ class SongDictTree:
 
         if path is not None:
             self.path = check_trailing_slash(path)
-            self.populate(delete_duplicate=delete_duplicate)
+            if populate:
+                self.populate(delete_duplicate=delete_duplicate, sort_files=sort_files, recurse=recurse)
         else:
             self.path = None
+
+        self.count_songs()
 
     def __getitem__(self, item):
         return self.artists[item]
@@ -60,25 +94,23 @@ class SongDictTree:
     def get(self, item):
         return self.artists.get(item)
 
-    def populate(self, delete_duplicate: bool = False):
+    def populate(self, delete_duplicate: bool = False, sort_files: bool = False, recurse: bool = True):
         print('Building tree...')
-        if self.type == 'takeout':
-            recurse = True
-        else:
-            recurse = True
-        self.add_directory(path=self.path, recurse=recurse, delete_duplicate=delete_duplicate)
+        self.add_directory(path=self.path, recurse=recurse, delete_duplicate=delete_duplicate, sort_files=sort_files)
         print('Done.')
 
-    def add_directory(self, path, recurse: bool = False, delete_duplicate: bool = False):
+    def add_directory(self, path, recurse: bool = False, delete_duplicate: bool = False, sort_files: bool = False):
         path = check_trailing_slash(path)
         print('Adding directory:', path)
-        for song in filter(lambda f: get_filetype(f) in song_filetypes, os.listdir(path)):
-            self.add_song(path=path, filename=song, delete_duplicate=delete_duplicate)
         if recurse:
             for directory in filter(lambda n: os.path.isdir(path + n), os.listdir(path)):
-                self.add_directory(path=path + directory, recurse=True, delete_duplicate=delete_duplicate)
+                self.add_directory(path=path + directory, recurse=True, delete_duplicate=delete_duplicate,
+                                   sort_files=sort_files)
 
-    def add_song(self, path: str, filename: str, delete_duplicate: bool = False):
+        for song in filter(lambda f: get_filetype(f) in song_filetypes, os.listdir(path)):
+            self.add_song(path=path, filename=song, delete_duplicate=delete_duplicate, sort_files=sort_files)
+
+    def add_song(self, path: str, filename: str, delete_duplicate: bool = False, sort_files: bool = False):
         print('Adding song:', path + "\\" + filename)
         path = check_trailing_slash(path) + filename
         song = Song(path)
@@ -92,8 +124,10 @@ class SongDictTree:
             artist = song.tags['ARTIST'][0]
         song.artist = artist
         if self.artists.get(artist) is None:
-            self.artists[artist] = ArtistDictTree(title=artist)
-        self.artists[artist].add_song(song, path=path, filename=filename, delete_duplicate=delete_duplicate)
+            self.artists[artist] = ArtistDictTree(title=artist, sort_files=sort_files,
+                                                  path=self.path)
+        self.artists[artist].add_song(song, path=path, filename=filename, delete_duplicate=delete_duplicate,
+                                      sort_files=sort_files)
 
     def show_artists(self):
         for artist in self.artists:
@@ -116,19 +150,28 @@ class SongDictTree:
         self.num_tracks = num
         return num
 
-    def compare(self, other: 'SongDictTree'):
+    def compare(self, other: 'SongDictTree', copy: bool = False):
         """
         Returns a new SongDictTree containing the artists present in this tree but missing in the other, etc.
         :param other:
         :return:
         """
-        missing_artists = SongDictTree(library_type='comparison')
+        if copy:
+            path = other.path
+            sort_files = True
+        else:
+            path = None
+            sort_files = False
+        missing_artists = SongDictTree(library_type='comparison', path=path, sort_files=sort_files, populate=False)
         for artist_name in self.artists:
-            artist = self[artist_name]
+            artist = self.artists[artist_name]
+            print("Searching for artist", artist.title)
             if other.get(artist.title) is None:
-                missing_artists[artist.title] = artist
+                print("Artist not found. Adding to difference. Copy is", copy)
+                missing_artists[artist.title] = artist.__copy__(path=other.path, sort_files=copy)
             else:
-                missing_albums = artist.compare(other[artist.title])
+                print("Artist found. Looking for missing albums.")
+                missing_albums = artist.compare(other[artist.title], copy=copy)
                 if len(missing_albums) > 0:
                     missing_artists[artist.title] = missing_albums
         missing_artists.count_songs()
@@ -159,7 +202,7 @@ class SongDictTree:
 
 
 class ArtistDictTree:
-    def __init__(self, title: str, path: str = ""):
+    def __init__(self, title: str, path: str = "", sort_files: bool = False):
         """
         :param title:
         :param path: The directory containing the albums by a certain artist.
@@ -167,6 +210,9 @@ class ArtistDictTree:
         self.title = str(title)
         self.path = check_trailing_slash(path)
         self.albums = {}
+        if sort_files:
+            if not os.path.isdir(path):
+                os.mkdir(path)
 
     def __getitem__(self, item):
         return self.albums[item]
@@ -177,18 +223,33 @@ class ArtistDictTree:
     def __len__(self):
         return len(self.albums)
 
+    def __copy__(self, path: str = None, sort_files: bool = False):
+        if path is None:
+            path = self.path
+        else:
+            path = check_trailing_slash(path)
+
+        copy = ArtistDictTree(title=self.title, path=path, sort_files=sort_files)
+        for album_name in self.albums:
+            copy.albums[album_name] = self.albums[album_name].__copy__(path=path + sanitise_path(album_name),
+                                                                       sort_files=sort_files)
+        return copy
+
     def get(self, item):
         return self.albums.get(item)
 
-    def add_song(self, song: 'Song', path: str, filename: str, delete_duplicate: bool = False):
+    def add_song(self, song: 'Song', path: str, filename: str, delete_duplicate: bool = False,
+                 sort_files: bool = False):
         if song.tags.get('ALBUM') in [None, []]:
             album = 'None'
         else:
             album = song.tags['ALBUM'][0]
         song.album = album
         if self.get(album) is None:
-            self[album] = AlbumDictTree(title=album, artist=self.title)
-        self.albums[album].add_song(song, path=path, filename=filename, delete_duplicate=delete_duplicate)
+            self[album] = AlbumDictTree(title=album, artist=self.title, sort_files=sort_files,
+                                        path=self.path + sanitise_path(album))
+        self.albums[album].add_song(song, path=path, filename=filename, delete_duplicate=delete_duplicate,
+                                    sort_files=sort_files)
 
     def show_albums(self, pad: int = 0):
         padding = ""
@@ -211,20 +272,28 @@ class ArtistDictTree:
             num += self[album].count_songs()
         return num
 
-    def compare(self, other: 'ArtistDictTree'):
+    def compare(self, other: 'ArtistDictTree', copy: bool = False):
         """
         Returns a new ArtistDictTree containing the albums present in this artist but missing in the other; it will also
         include albums present in both but missing songs in the other, with those songs listed.
         :param other:
         :return:
         """
-        missing_albums = ArtistDictTree(self.title)
+        missing_albums = ArtistDictTree(self.title, path=other.path, sort_files=copy)
         for album_name in self.albums:
             album = self[album_name]
+            print("\tSearching for album", album.title, "in", self.title)
             if other.get(album.title) is None:
-                missing_albums[album.title] = album
+                print("\tAlbum not found. Adding to difference. Copy is", copy)
+                missing_albums[album.title] = album.__copy__(path=other.path + sanitise_path(album.title),
+                                                             sort_files=copy)
+                # for song_name in album.songs:
+                #     song = album.songs[song_name]
+                #     print("\t\tAdding", song_name, "to difference. Copy is", copy)
+                #     missing_albums[album.title].add_song(song=song, path=song.path, sort_files=copy, move=False)
             else:
-                missing_songs = album.compare(other[album.title])
+                print("\tAlbum found. Looking for missing songs. Copy is", copy)
+                missing_songs = album.compare(other[album.title], copy=copy)
                 if len(missing_songs) > 0:
                     missing_albums[album.title] = missing_songs
         return missing_albums
@@ -238,7 +307,7 @@ class ArtistDictTree:
 
 
 class AlbumDictTree:
-    def __init__(self, title: str, artist: str = "", path: str = ""):
+    def __init__(self, title: str, artist: str = "", path: str = "", sort_files: bool = False):
         """
 
         :param title:
@@ -249,6 +318,10 @@ class AlbumDictTree:
         self.artist = artist
         self.songs = {}
 
+        if sort_files:
+            if not os.path.isdir(path):
+                os.mkdir(path)
+
     def __getitem__(self, item):
         return self.songs[item]
 
@@ -258,11 +331,24 @@ class AlbumDictTree:
     def __len__(self):
         return len(self.songs)
 
+    def __copy__(self, path: str = None, sort_files: bool = False):
+        if path is None:
+            path = self.path
+        else:
+            path = check_trailing_slash(path)
+        copy = AlbumDictTree(title=self.title, artist=self.artist, path=path, sort_files=sort_files)
+        for song_name in self.songs:
+            song = self.songs[song_name]
+            copy.add_song(song=song, path=song.path, sort_files=sort_files)
+        return copy
+
     def get(self, item):
         return self.songs.get(item)
 
     def add_song(self, song: 'Song', path: str = '', filename: str = '', set_title: bool = True,
-                 delete_duplicate: bool = False):
+                 delete_duplicate: bool = False, sort_files: bool = False, move: bool = True):
+        if filename == '':
+            filename = get_filename(path)
 
         if set_title:
             if song.tags.get('TITLE') in [None, []]:
@@ -272,6 +358,17 @@ class AlbumDictTree:
             song.title = title
         if self.get(song.title) is None:
             self[song.title] = song
+            if sort_files:
+                new_path = self.path + filename
+                if new_path != path:
+                    song.path = new_path
+                    if move:
+                        print("Moving", path, "to", new_path)
+                        shutil.move(src=path, dst=new_path)
+                    else:
+                        print("Copying", path, "to", new_path)
+                        shutil.copy(src=path, dst=new_path)
+
         else:
             print("Attempted to add duplicate song,", song.title, ';', song.album, ';', song.artist)
             if delete_duplicate:
@@ -288,17 +385,22 @@ class AlbumDictTree:
     def count_songs(self):
         return len(self.songs)
 
-    def compare(self, other: 'AlbumDictTree'):
+    def compare(self, other: 'AlbumDictTree', copy: bool = False):
         """
         Returns a new AlbumDictTree containing songs present in this album but missing in the other.
         :param other:
         :return:
         """
-        missing_songs = AlbumDictTree(self.title)
+        # sort_files is copy because, if we are copying, it needs to create/check for the destination folder's exisence.
+        missing_songs = AlbumDictTree(self.title, path=other.path, sort_files=copy)
         for song_name in self.songs:
             song = self[song_name]
+            print("\t\tSearching for song", song.title, "in", other.title)
             if other.get(song.title) is None:
-                missing_songs.add_song(song, set_title=True)
+                print("\t\tSong not found. Adding to difference. Copy is", copy)
+                missing_songs.add_song(song, path=song.path, set_title=True, sort_files=copy, move=False)
+            else:
+                print("\t\tSong found. Ignoring.")
         return missing_songs
 
     def csv(self):
