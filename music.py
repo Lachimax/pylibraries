@@ -5,8 +5,8 @@ import shutil
 from utils import *
 
 song_filetypes = ['mp3', 'm4a', 'm4p', 'MP3', 'aif', 'm4v', 'Mp3', 'wav', 'mpg']
-library_types = ['itunes', 'google play music', 'takeout', 'comparison']
-
+library_types = ['itunes', 'google play music', 'takeout', 'comparison', 'takeout csv']
+empty_lists = [None, [], [""]]
 
 # def playlist_takeout_to_itunes(path):
 
@@ -46,28 +46,41 @@ class SongDictTree:
         return self.artists.get(item)
 
     def populate(self, delete_duplicate: bool = False, sort_files: bool = False, recurse: bool = True):
+        if self.type == 'takeout csv':
+            is_csv = True
+        else:
+            is_csv = False
         print('Building tree...')
-        self.add_directory(path=self.path, recurse=recurse, delete_duplicate=delete_duplicate, sort_files=sort_files)
+        self.add_directory(path=self.path, recurse=recurse, delete_duplicate=delete_duplicate, sort_files=sort_files,
+                           is_csv=is_csv)
         print('Done.')
 
-    def add_directory(self, path, recurse: bool = False, delete_duplicate: bool = False, sort_files: bool = False):
+    def add_directory(self, path, recurse: bool = False, delete_duplicate: bool = False, sort_files: bool = False,
+                      is_csv: bool = False):
         path = check_trailing_slash(path)
         print('Adding directory:', path)
         if recurse:
             for directory in filter(lambda n: os.path.isdir(path + n), os.listdir(path)):
                 self.add_directory(path=path + directory, recurse=True, delete_duplicate=delete_duplicate,
-                                   sort_files=sort_files)
+                                   sort_files=sort_files, is_csv=is_csv)
 
-        for song in filter(lambda f: get_filetype(f) in song_filetypes, os.listdir(path)):
-            self.add_song(path=path, filename=song, delete_duplicate=delete_duplicate, sort_files=sort_files)
+        if is_csv:
+            allowed = ['csv']
+        else:
+            allowed = song_filetypes
 
-    def add_song(self, path: str, filename: str, delete_duplicate: bool = False, sort_files: bool = False):
+        for song in filter(lambda f: get_filetype(f) in allowed, os.listdir(path)):
+            self.add_song(path=path, filename=song, delete_duplicate=delete_duplicate, sort_files=sort_files,
+                          is_csv=is_csv)
+
+    def add_song(self, path: str, filename: str, delete_duplicate: bool = False, sort_files: bool = False,
+                 is_csv: bool = False):
         print('Adding song:', path + "\\" + filename)
         path = check_trailing_slash(path) + filename
-        song = Song(path)
+        song = Song(path, is_csv=is_csv)
 
-        if song.tags.get('ARTIST') in [None, []]:
-            if song.tags.get('ALBUMARTIST') in [None, []]:
+        if song.tags.get('ARTIST') in [None, [], [""]]:
+            if song.tags.get('ALBUMARTIST') in [None, [], [""]]:
                 artist = 'None'
             else:
                 artist = song.tags['ALBUMARTIST'][0]
@@ -191,7 +204,7 @@ class ArtistDictTree:
 
     def add_song(self, song: 'Song', path: str, filename: str, delete_duplicate: bool = False,
                  sort_files: bool = False):
-        if song.tags.get('ALBUM') in [None, []]:
+        if song.tags.get('ALBUM') in [None, [], [""]]:
             album = 'None'
         else:
             album = song.tags['ALBUM'][0]
@@ -302,7 +315,7 @@ class AlbumDictTree:
             filename = get_filename(path)
 
         if set_title:
-            if song.tags.get('TITLE') in [None, []]:
+            if song.tags.get('TITLE') in [None, [], [""]]:
                 title = filename
             else:
                 title = song.tags['TITLE'][0]
@@ -363,17 +376,35 @@ class AlbumDictTree:
 
 
 class Song:
-    def __init__(self, path: str, title: str = "", album: str = "", artist: str = ""):
+    def __init__(self, path: str, title: str = "", album: str = "", artist: str = "", is_csv: bool = False):
         self.title = str(title)
         self.path = path
         self.filetype = get_filetype(self.path)
         self.album = album
         self.artist = artist
+        self.is_csv = is_csv
         self.tags = self.get_tags()
 
     def get_tags(self):
-        file = tl.File(self.path)
-        return file.tags
+        if self.is_csv:
+            # try:
+            with open(self.path, newline='', encoding="utf8") as csvfile:
+                reader = csv.DictReader(csvfile)
+
+                csv_row = reader.__next__()
+            tags = {'TITLE': [csv_row['Title']],
+                    'ALBUM': [csv_row['Album']],
+                    'ARTIST': [csv_row['Artist']],
+                    'ALBUMARTIST': [csv_row['Artist']]}
+            # except UnicodeDecodeError:
+            #     tags = {'TITLE': 'ERROR',
+            #             'ALBUM': 'ERROR',
+            #             'ARTIST': 'ERROR',
+            #             'ALBUMARTIST': 'ERROR'}
+            return tags
+        else:
+            file = tl.File(self.path)
+            return file.tags
 
     def show(self, prefix: str = ''):
         print(prefix + self.title)

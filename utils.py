@@ -16,7 +16,7 @@ def clear_empty_paths(path):
 
 def sanitise_path(path):
     path = path.replace(";", "_").replace("|", "_").replace(",", "_").replace('"', "_").replace("'", "_")
-    path = path.replace(":", "_").replace("*", "_").replace(".", "_").replace("/", "_").replace("\\", "")
+    path = path.replace(":", "_").replace("*", "_").replace("/", "_").replace("\\", "")
     path = path.replace("^", "_").replace("<", "(").replace(">", ")").replace("?", "_")
     while path[-1] == " ":
         path = path[:-1]
