@@ -1,6 +1,7 @@
 from sys import platform
 import os
 
+
 def clear_empty_paths(path):
     for next_path in filter(lambda d: os.path.isdir(path + "\\" + d), os.listdir(path)):
         print(next_path)
@@ -41,3 +42,12 @@ def get_filetype(path):
             return path[pos + 1:]
         pos = pos - 1
     return 'directory'
+
+
+def get_filename(path):
+    pos = -1
+    while abs(pos) <= len(path):
+        if path[pos] == '\\':
+            return path[pos + 1:]
+        pos = pos - 1
+    return path

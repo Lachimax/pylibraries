@@ -2,17 +2,7 @@ import os
 import taglib as tl
 import csv
 import shutil
-from utils import clear_empty_paths, sanitise_path, check_trailing_slash, get_filetype
-
-
-def get_filename(path):
-    pos = -1
-    while abs(pos) <= len(path):
-        if path[pos] == '\\':
-            return path[pos + 1:]
-        pos = pos - 1
-    return path
-
+from utils import *
 
 song_filetypes = ['mp3', 'm4a', 'm4p', 'MP3', 'aif', 'm4v', 'Mp3', 'wav', 'mpg']
 library_types = ['itunes', 'google play music', 'takeout', 'comparison']
