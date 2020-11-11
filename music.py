@@ -8,7 +8,41 @@ song_filetypes = ['mp3', 'm4a', 'm4p', 'MP3', 'aif', 'm4v', 'Mp3', 'wav', 'mpg']
 library_types = ['itunes', 'google play music', 'takeout', 'comparison', 'takeout csv']
 empty_lists = [None, [], [""]]
 
-# def playlist_takeout_to_itunes(path):
+
+def all_playlists_takeout_to_itunes(path, output):
+    path = check_trailing_slash(path)
+    output = check_trailing_slash(output)
+    print("Looking for playlists at", path)
+    for title in filter(lambda d: os.path.isdir(path + d), os.listdir(path)):
+        dir = path + title + "\\Tracks\\"
+        if os.path.isdir(dir):
+            print("Reading playlist", title, "from", dir)
+            playlist_takeout_to_itunes(path=dir, output=output + title + ".txt")
+
+
+def playlist_takeout_to_itunes(path, output):
+    path = check_trailing_slash(path)
+    playlist = []
+    for file in os.listdir(path):
+        print("Getting file", file)
+        file = path + file
+        with open(file, newline='', encoding="utf8") as csvfile:
+            reader = csv.DictReader(csvfile)
+
+            csv_row = reader.__next__()
+        song = {'Title': sanitise_html_encoding(csv_row['Title']),
+                'Album': sanitise_html_encoding(csv_row['Album']),
+                'Artist': sanitise_html_encoding(csv_row['Artist']),
+                'Index': sanitise_html_encoding(csv_row['Playlist Index'])}
+        playlist.append(song)
+    playlist.sort(key=lambda s: int(s['Index']))
+
+    print("Writing playlist to", output)
+    with open(output, mode='w', encoding='utf8') as textfile:
+        textfile.write('Name\tArtist\tAlbum\n')
+        for song in playlist:
+            textfile.write(f"{song['Title']}\t{song['Artist']}\t{song['Album']}\n")
+    textfile.close()
 
 
 class SongDictTree:
@@ -392,10 +426,10 @@ class Song:
                 reader = csv.DictReader(csvfile)
 
                 csv_row = reader.__next__()
-            tags = {'TITLE': [csv_row['Title']],
-                    'ALBUM': [csv_row['Album']],
-                    'ARTIST': [csv_row['Artist']],
-                    'ALBUMARTIST': [csv_row['Artist']]}
+            tags = {'TITLE': [sanitise_html_encoding(csv_row['Title'])],
+                    'ALBUM': [sanitise_html_encoding(csv_row['Album'])],
+                    'ARTIST': [sanitise_html_encoding(csv_row['Artist'])],
+                    'ALBUMARTIST': [sanitise_html_encoding(csv_row['Artist'])]}
             # except UnicodeDecodeError:
             #     tags = {'TITLE': 'ERROR',
             #             'ALBUM': 'ERROR',
