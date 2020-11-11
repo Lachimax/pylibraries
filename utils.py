@@ -14,9 +14,15 @@ def clear_empty_paths(path):
             os.removedirs(path)
 
 
+def sanitise_html_encoding(string):
+    string = string.replace("&quot;", '"').replace("&#39;", "'").replace("&amp;", "&").replace("&lt;", "<")
+    string = string.replace("&gt;", ">")#.replace('â€“', "–").replace('â€¦', '…').replace('â€™', '’').replace('â€œ', '“')
+    return string
+
+
 def sanitise_path(path):
     path = path.replace(";", "_").replace("|", "_").replace(",", "_").replace('"', "_").replace("'", "_")
-    path = path.replace(":", "_").replace("*", "_").replace("/", "_").replace("\\", "")
+    path = path.replace(":", "_").replace("*", "_").replace("/", "_").replace("\\", "").replace(".", "_")
     path = path.replace("^", "_").replace("<", "(").replace(">", ")").replace("?", "_")
     while path[-1] == " ":
         path = path[:-1]
@@ -47,7 +53,7 @@ def get_filetype(path):
 def get_filename(path):
     pos = -1
     while abs(pos) <= len(path):
-        if path[pos] == '\\':
+        if path[pos] == '\\' and pos != -1:
             return path[pos + 1:]
         pos = pos - 1
     return path
